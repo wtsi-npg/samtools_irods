@@ -264,7 +264,11 @@ faidx_t *fai_load(const char *fn)
 	sprintf(str, "%s.fai", fn);
 
 #ifdef _USE_KNETFILE
+# ifdef __DO_IRODS__
+    if (strstr(fn, "ftp://") == fn || strstr(fn, "http://") == fn || strstr(fn, "irods:") == fn)
+#else
     if (strstr(fn, "ftp://") == fn || strstr(fn, "http://") == fn)
+#endif
     {
         fp = download_and_open(str);
         if ( !fp )

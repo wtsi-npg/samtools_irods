@@ -40,7 +40,12 @@
   @copyright Genome Research Ltd.
  */
 
+#ifdef __DO_IRODS__
+#define BAM_VERSION "0.1.18-dev (r982:313:irods_v03)"
+#else
 #define BAM_VERSION "0.1.18-dev (r982:313)"
+#endif
+
 
 #include <stdint.h>
 #include <stdlib.h>

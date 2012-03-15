@@ -1,0 +1,89 @@
+
+March 2012
+Kevin Lewis
+Wellcome Trust Sanger Institute
+kl2@sanger.ac.uk
+
+This repository contains tweaked samtools code which allows samtools to treat
+files prefixed with "irods:" in a similar way to how it already handles http://
+and ftp:// data. What I've done is take the isio routines from the iRODS source,
+done some bug fixing and amending, added it to the samtools code and tweaked the
+relevant samtools code to use the new routines (most changes in knetfile.c,
+bam_index.c and the Makefiles). You will need an iRODS client library and
+include files (see https://www.irods.org/index.php/Downloads and the notes below)
+to build samtools with the added iRODS functionality.
+
+=================
+= How to use it =
+=================
+
+Simple answer: After cloning, build a new samtools like this:
+  $ ST_INCLUDE_IRODS=1 IRODS_BASE=/usr/me/src/irods/iRODS2.5 make
+
+(This assumes that you have unpacked and built iRODS in /usr/me/src/irods/iRODS2.5)
+
+
+=====================
+Download iRODS source
+=====================
+You should be able to download the iRODS source from here: https://www.irods.org/index.php/Downloads
+
+========================
+Building iRODS libraries
+========================
+
+If you want or need to build the iRODS libraries yourself, it is relatively straightforward - you
+may be able to just use the supplied irodssetup script. I had to make a couple of small changes
+to the config files first to enable Kerberos authentication:
+
+Uncomment the line in config/config.mk.in line 307:
+
+   KRB_AUTH = 1
+
+now change the KRB_LOC value in line 309:
+
+  KRB_LOC=/usr/lib
+
+Build the library using the irodssetup script to build the client:
+
+    kl2@sfnode:/usr/me/src/irods/iRODS_2.5$ ./irodssetup
+
+    ...
+    Include additional prompts for advanced settings [no]?
+    ...
+    Build an iRODS server [yes]? no
+    ...
+    Include GSI [no]?
+    ...
+    Save configuration (irods.config) [yes]?
+    ...
+    Start iRODS build [yes]?
+    ...
+
+
+==============
+Build samtools
+==============
+
+Now you can build samtools as described above.
+
+
+===============================
+Example use of the new samtools
+===============================
+  kl2@sfnode:~/src/samtools/samtools-0.1.18$ ./samtools view -h irods:/seq/3400/3400_1#25.bam
+  @HD	VN:1.0	SO:coordinate
+  @SQ	SN:1	LN:249250621	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:1b22b98cdeb4a9304cb5d48026a85128	SP:Human
+  @SQ	SN:2	LN:243199373	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:a0d9851da00400dec1098a9255ac712e	SP:Human
+  @SQ	SN:3	LN:198022430	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:fdfd811849cc2fadebc929bb925902e5	SP:Human
+  @SQ	SN:4	LN:191154276	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:23dccd106897542ad87d2765d28a19a1	SP:Human
+  @SQ	SN:5	LN:180915260	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:0740173db9ffd264d728f32784845cd7	SP:Human
+  @SQ	SN:6	LN:171115067	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:1d3a93a248d92a729ee764823acbbc6b	SP:Human
+  @SQ	SN:7	LN:159138663	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:618366e953d6aaad97dbe4777c29375e	SP:Human
+  @SQ	SN:8	LN:146364022	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:96f514a9929e410c6651697bded59aec	SP:Human
+  @SQ	SN:9	LN:141213431	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:3e273117f15e0a400f01055d9f393768	SP:Human
+  @SQ	SN:10	LN:135534747	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:988c28e000e84c26d552359af1ea2e1d	SP:Human
+  @SQ	SN:11	LN:135006516	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:98c59049a2df285c76ffb1c6db8f8b96	SP:Human
+  @SQ	SN:12	LN:133851895	UR:ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/human_g1k_v37.fasta.gz	AS:NCBI37	M5:51851ac0e1a115847ad36449b0015864	SP:Human
+  ...
+

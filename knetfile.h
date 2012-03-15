@@ -15,11 +15,18 @@
 #define netclose(fd) closesocket(fd)
 #endif
 
+#ifdef __DO_IRODS__
+#include "isio.h"
+#endif
+
 // FIXME: currently I/O is unbuffered
 
 #define KNF_TYPE_LOCAL 1
 #define KNF_TYPE_FTP   2
 #define KNF_TYPE_HTTP  3
+#ifdef __DO_IRODS__
+#define KNF_TYPE_IRODS  4
+#endif
 
 typedef struct knetFile_s {
 	int type, fd;
@@ -34,6 +41,12 @@ typedef struct knetFile_s {
 
 	// the following are for HTTP only
 	char *path, *http_host;
+
+#ifdef __DO_IRODS__
+        // the following is for iRODS only
+        ISIO_FILE *fp;
+#endif
+
 } knetFile;
 
 #define knet_tell(fp) ((fp)->offset)

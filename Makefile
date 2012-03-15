@@ -1,13 +1,12 @@
 CC=			gcc
 CFLAGS=		-g -Wall -O2
-#LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 KNETFILE_O=	knetfile.o
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			bam_pileup.o bam_lpileup.o bam_md.o razf.o faidx.o bedidx.o \
 			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o kprobaln.o bam_cat.o
-AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
-			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
+AOBJS=		bam_tview.o bam_plcmd.o sam_view.o	\
+			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o
 PROG=		samtools
@@ -15,6 +14,17 @@ INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
+LIBIRODS=
+
+ifdef ST_INCLUDE_IRODS
+ifndef IRODS_BASE
+IRODS_BASE = ../../irods/iRODS
+endif
+INCLUDES += -I $(IRODS_BASE)/lib/api/include -I $(IRODS_BASE)/lib/core/include -I $(IRODS_BASE)/lib/md5/include -I $(IRODS_BASE)/server/core/include -I $(IRODS_BASE)/server/icat/include -I $(IRODS_BASE)/server/drivers/include -I $(IRODS_BASE)/server/re/include
+DFLAGS += -D __DO_IRODS__
+LOBJS += isio.o
+LIBIRODS = -L $(IRODS_BASE)/lib/core/obj -l RodsAPIs -lpthread -ldl -lgssapi_krb5
+endif
 
 .SUFFIXES:.c .o
 .PHONY: all lib
@@ -43,7 +53,7 @@ libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz $(LIBIRODS)
 
 razip:razip.o razf.o $(KNETFILE_O)
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz
@@ -69,6 +79,8 @@ bam2bcf_indel.o:bam2bcf.h
 errmod.o:errmod.h
 phase.o:bam.h khash.h ksort.h
 bamtk.o:bam.h
+
+isio.o:isio.h
 
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h

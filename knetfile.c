@@ -43,6 +43,10 @@
 #include <sys/socket.h>
 #endif
 
+#if __DO_IRODS__
+#include "isio.h"
+#endif
+
 #include "knetfile.h"
 
 /* In winsock.h, the type of a socket is SOCKET, which is: "typedef
@@ -444,6 +448,7 @@ int khttp_connect_file(knetFile *fp)
 	return 0;
 }
 
+
 /********************
  * Generic routines *
  ********************/
@@ -467,6 +472,18 @@ knetFile *knet_open(const char *fn, const char *mode)
 		fp = khttp_parse_url(fn, mode);
 		if (fp == 0) return 0;
 		khttp_connect_file(fp);
+#if __DO_IRODS__
+	} else if (strstr(fn, "irods:") == fn) {
+		ISIO_FILE *sfd = isioFileOpen(fn+6, "r");
+		if(sfd == NULL) {
+			return 0;
+		}
+		fp = (knetFile*)calloc(1, sizeof(knetFile));
+		fp->type = KNF_TYPE_IRODS;
+		fp->fp = (ISIO_FILE *)sfd;
+		fp->fd = 0;     /* avoid close below */
+		fp->ctrl_fd = -1;
+#endif
 	} else { // local file
 #ifdef _WIN32
 		/* In windows, O_BINARY is necessary. In Linux/Mac, O_BINARY may
@@ -513,6 +530,23 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 		if (fp->is_ready == 0)
 			khttp_connect_file(fp);
 	}
+#if __DO_IRODS__
+	else if (fp->type == KNF_TYPE_IRODS) {
+		off_t rest = len, curr;
+
+		while(rest > 0) {
+			curr = isioFileRead(fp->fp, buf + l, rest);
+			if (curr < 0) return -1;
+			if (curr == 0) break;	/* ? */
+			l += curr; rest -= curr;
+		}
+
+		fp->offset += l;
+
+		return(l);      /* unlike other remote protocols, doesn't use my_netread */
+	}
+#endif
+
 	if (fp->type == KNF_TYPE_LOCAL) { // on Windows, the following block is necessary; not on UNIX
 		off_t rest = len, curr;
 		while (rest) {
@@ -568,6 +602,20 @@ off_t knet_seek(knetFile *fp, int64_t off, int whence)
 		fp->is_ready = 0;
 		return 0;
 	}
+#if __DO_IRODS__
+	else if (fp->type == KNF_TYPE_IRODS)  {
+		isioFileSeek(fp->fp, off, whence);
+		if (whence==SEEK_CUR)
+			fp->offset += off;
+		else if (whence==SEEK_SET)
+			fp->offset = off;
+		else if (whence==SEEK_END)
+			fp->offset = isioFileTell(fp->fp);
+
+		return 0;
+	}
+#endif
+
 	errno = EINVAL;
     fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
 	return -1;
@@ -581,6 +629,9 @@ int knet_close(knetFile *fp)
 		/* On Linux/Mac, netclose() is an alias of close(), but on
 		 * Windows, it is an alias of closesocket(). */
 		if (fp->type == KNF_TYPE_LOCAL) close(fp->fd);
+#if __DO_IRODS__
+		else if (fp->type == KNF_TYPE_IRODS) isioFileClose(fp->fp);
+#endif
 		else netclose(fp->fd);
 	}
 	free(fp->host); free(fp->port);

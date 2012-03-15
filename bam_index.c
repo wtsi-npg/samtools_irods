@@ -161,8 +161,8 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	h = bam_header_read(fp);
 	if(h == 0) {
-	    fprintf(stderr, "[bam_index_core] Invalid BAM header.");
-	    return NULL;
+		fprintf(stderr, "[bam_index_core] Invalid BAM header.");
+		return NULL;
 	}
 
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));
@@ -390,22 +390,31 @@ bam_index_t *bam_index_load_local(const char *_fn)
 {
 	FILE *fp;
 	char *fnidx, *fn;
+	const char *p;
+	int fn_len;
 
+#ifdef __DO_IRODS__
+	if (strstr(_fn, "ftp://") == _fn || strstr(_fn, "http://") == _fn || strstr(_fn, "irods:") == _fn) {
+		p=rindex(_fn, '/');
+		if(p== NULL) p=rindex(_fn, ':');
+#else
 	if (strstr(_fn, "ftp://") == _fn || strstr(_fn, "http://") == _fn) {
-		const char *p;
-		int l = strlen(_fn);
-		for (p = _fn + l - 1; p >= _fn; --p)
-			if (*p == '/') break;
+		p=rindex(_fn, '/');
+#endif
 		fn = strdup(p + 1);
-	} else fn = strdup(_fn);
-	fnidx = (char*)calloc(strlen(fn) + 5, 1);
-	strcpy(fnidx, fn); strcat(fnidx, ".bai");
-	fp = fopen(fnidx, "rb");
-	if (fp == 0) { // try "{base}.bai"
-		char *s = strstr(fn, "bam");
-		if (s == fn + strlen(fn) - 3) {
-			strcpy(fnidx, fn);
-			fnidx[strlen(fn)-1] = 'i';
+	}
+	else {
+		fn = strdup(_fn);
+	}
+
+	fn_len = strlen(fn);
+
+	fnidx = (char *)calloc(fn_len + 5, 1);
+	strcpy(fnidx, fn);
+	strcat(fnidx, ".bai");
+	if((fp = fopen(fnidx, "rb")) == NULL) { // try "{base}.bai"
+		if(fn_len >= 4 && !strncmp(fnidx + fn_len - 4, ".bam", 4)) {
+			strcpy(fnidx+fn_len-1, "i");
 			fp = fopen(fnidx, "rb");
 		}
 	}
@@ -426,18 +435,23 @@ static void download_from_remote(const char *url)
 	uint8_t *buf;
 	knetFile *fp_remote;
 	int l;
+
+#ifdef __DO_IRODS__
+	if (strstr(url, "ftp://") != url && strstr(url, "http://") != url && strstr(url, "irods:") != url) return;
+#else
 	if (strstr(url, "ftp://") != url && strstr(url, "http://") != url) return;
+#endif
 	l = strlen(url);
 	for (fn = (char*)url + l - 1; fn >= url; --fn)
 		if (*fn == '/') break;
 	++fn; // fn now points to the file name
 	fp_remote = knet_open(url, "r");
 	if (fp_remote == 0) {
-		fprintf(stderr, "[download_from_remote] fail to open remote file.\n");
+		fprintf(stderr, "[download_from_remote(\"%s\")] fail to open remote file.\n", url);
 		return;
 	}
 	if ((fp = fopen(fn, "wb")) == 0) {
-		fprintf(stderr, "[download_from_remote] fail to create file in the working directory.\n");
+		fprintf(stderr, "[download_from_remote(\"%s\")] fail to create file in the working directory.\n", url);
 		knet_close(fp_remote);
 		return;
 	}
@@ -458,14 +472,37 @@ static void download_from_remote(const char *url)
 bam_index_t *bam_index_load(const char *fn)
 {
 	bam_index_t *idx;
-	idx = bam_index_load_local(fn);
+	char *fnidx = NULL;
+	int len;
+
+	idx = bam_index_load_local(fn);	/* if it's already downloaded locally, use that */
+
+#ifdef __DO_IRODS__
+	if (idx == 0 && (strstr(fn, "ftp://") == fn || strstr(fn, "http://" ) == fn || strstr(fn, "irods:" ) == fn)) {
+#else
 	if (idx == 0 && (strstr(fn, "ftp://") == fn || strstr(fn, "http://") == fn)) {
-		char *fnidx = calloc(strlen(fn) + 5, 1);
-		strcat(strcpy(fnidx, fn), ".bai");
-		fprintf(stderr, "[bam_index_load] attempting to download the remote index file.\n");
+#endif
+		len = strlen(fn);
+		fnidx = calloc(len + 5, 1);
+		strcpy(fnidx, fn);
+		strcat(fnidx, ".bai");  /* first try just tacking on ".bai" */
 		download_from_remote(fnidx);
 		idx = bam_index_load_local(fn);
+
+		if(idx == 0) {
+			/* the open (and presumably the download) failed - so now try
+				just changing the ".bam" extension (if there is one)
+				to ".bai" and attempt another download and open */
+			len = strlen(fnidx);
+			if(len >= 8 && !strcmp(fnidx+len-8, ".bam.bai")) {
+				strcpy(fnidx+len-5, "i");	/* just change ".bam" extension to ".bai" if possible */
+				download_from_remote(fnidx);
+				idx = bam_index_load_local(fn);
+			}
+		}
+
 	}
+
 	if (idx == 0) fprintf(stderr, "[bam_index_load] fail to load BAM index.\n");
 	return idx;
 }

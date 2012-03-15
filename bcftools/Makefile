@@ -8,6 +8,16 @@ PROG=		bcftools
 INCLUDES=	
 SUBDIRS=	.
 
+LIBIRODS=
+ifdef ST_INCLUDE_IRODS
+ifndef IRODS_BASE
+IRODS_BASE = ../../../irods/iRODS
+endif
+DFLAGS += -D __DO_IRODS__
+LIBIRODS = -L $(IRODS_BASE)/lib/core/obj -l RodsAPIs -lpthread -ldl -lgssapi_krb5
+AOBJS += $(OMISC)/isio.o
+endif
+
 .SUFFIXES:.c .o
 
 .c.o:
@@ -31,7 +41,7 @@ libbcf.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 bcftools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz $(LIBIRODS)
 
 bcf.o:bcf.h
 vcf.o:bcf.h
