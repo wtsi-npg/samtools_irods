@@ -1,4 +1,3 @@
-
 March 2012
 Kevin Lewis
 Wellcome Trust Sanger Institute
@@ -18,9 +17,9 @@ to build samtools with the added iRODS functionality.
 =================
 
 Simple answer: After cloning, build a new samtools like this:
-  $ ST_INCLUDE_IRODS=1 IRODS_BASE=/usr/me/src/irods/iRODS2.5 make
+  $ ST_INCLUDE_IRODS=1 IRODS_BASE=/home/me/src/irods/iRODS2.5 make
 
-(This assumes that you have unpacked and built iRODS in /usr/me/src/irods/iRODS2.5)
+(This assumes that you have unpacked and built iRODS in /home/me/src/irods/iRODS2.5)
 
 
 =====================
@@ -46,7 +45,7 @@ now change the KRB_LOC value in line 309:
 
 Build the library using the irodssetup script to build the client:
 
-    kl2@sfnode:/usr/me/src/irods/iRODS_2.5$ ./irodssetup
+    kl2@sfnode:/home/me/src/irods/iRODS_2.5$ ./irodssetup
 
     ...
     Include additional prompts for advanced settings [no]?
