@@ -60,6 +60,7 @@ static ISIO_FILE *new_isio_file(long l1descInx);
 static int destroy_isio_file(ISIO_FILE *ifp);
 static FILE *add_to_map(ISIO_FILE *ifp);
 static ISIO_FILE *is_in_map(int idx);
+static int remove_from_map(int idx);
 static int offset_in_current_buffer(ISIO_FILE *ifp, long offset, int whence, long *adj);
 static char *copy_filename(const char *filename);
 
@@ -185,6 +186,20 @@ static ISIO_FILE *is_in_map(int idx)
 	else
 		return(NULL);
 }
+
+static int remove_from_map(int idx)
+{
+    if(is_in_map(idx)) {
+        /* initially 1-based, so adjust to array index */
+        _cacheInfo[idx -1] = NULL;
+        return(0);
+    }
+    else
+    {
+        return(-1);
+    }
+}
+
 
 /*
 isioFileOpen:
@@ -649,6 +664,7 @@ int irodsfclose(FILE *fi_stream)
 	if (debug) printf("isiofclose: %d\n", i);
 
 	if((ifp=is_in_map(i)) != NULL) {
+        remove_from_map(i);
 		return(isioFileClose(ifp));
 	}
 	else {
