@@ -32,44 +32,46 @@ DEALINGS IN THE SOFTWARE.  */
 
 const char * samtools_version(void)
 {
-    return SAMTOOLS_VERSION;
+    return "12.34";
 }
 
 int success = 0;
 int failure = 0;
 
-void setup_test_1(int* argc, char*** argv)
+void xxx_setup_test_1(int* argc, char*** argv)
 {
-    *argc = 11;
+    *argc = 12;
     *argv = (char**)calloc(sizeof(char*), *argc);
-    (*argv)[0] = strdup("prog_name");
-    (*argv)[1] = strdup("-i");
-    (*argv)[2] = strdup("test/decode/6383_8.sam");
-    (*argv)[3] = strdup("-o");
-    (*argv)[4] = strdup("test/decode/out/xxx.sam");
-    (*argv)[5] = strdup("--output-fmt");
-    (*argv)[6] = strdup("sam");
-    (*argv)[7] = strdup("--input-fmt");
-    (*argv)[8] = strdup("sam");
-    (*argv)[9] = strdup("--barcode-file");
-    (*argv)[10] = strdup("test/decode/6383_8.tag");
+    (*argv)[0] = strdup("samtools");
+    (*argv)[1] = strdup("decode");
+    (*argv)[2] = strdup("-i");
+    (*argv)[3] = strdup("test/decode/6383_8.sam");
+    (*argv)[4] = strdup("-o");
+    (*argv)[5] = strdup("test/decode/out/xxx.sam");
+    (*argv)[6] = strdup("--output-fmt");
+    (*argv)[7] = strdup("sam");
+    (*argv)[8] = strdup("--input-fmt");
+    (*argv)[9] = strdup("sam");
+    (*argv)[10] = strdup("--barcode-file");
+    (*argv)[11] = strdup("test/decode/6383_8.tag");
 }
 
-void setup_test_2(int* argc, char*** argv)
+void setup_test_1(int* argc, char*** argv)
 {
-    *argc = 11;
+    *argc = 12;
     *argv = (char**)calloc(sizeof(char*), *argc);
-    (*argv)[0] = strdup("prog_name");
-    (*argv)[1] = strdup("-i");
-    (*argv)[2] = strdup("test/decode/6383_9.sam");
-    (*argv)[3] = strdup("-o");
-    (*argv)[4] = strdup("test/decode/out/xxx.sam");
-    (*argv)[5] = strdup("--output-fmt");
-    (*argv)[6] = strdup("sam");
-    (*argv)[7] = strdup("--input-fmt");
-    (*argv)[8] = strdup("sam");
-    (*argv)[9] = strdup("--barcode-file");
-    (*argv)[10] = strdup("test/decode/6383_8.tag");
+    (*argv)[0] = strdup("samtools");
+    (*argv)[1] = strdup("decode");
+    (*argv)[2] = strdup("-i");
+    (*argv)[3] = strdup("test/decode/6383_9.sam");
+    (*argv)[4] = strdup("-o");
+    (*argv)[5] = strdup("test/decode/out/xxx.sam");
+    (*argv)[6] = strdup("--output-fmt");
+    (*argv)[7] = strdup("sam");
+    (*argv)[8] = strdup("--input-fmt");
+    (*argv)[9] = strdup("sam");
+    (*argv)[10] = strdup("--barcode-file");
+    (*argv)[11] = strdup("test/decode/6383_8.tag");
 }
 
 bool check_test_1(const parsed_opts_t* opts) {
@@ -106,7 +108,6 @@ void test_countMismatches(char *a, char *b, int e)
 int main(int argc, char**argv)
 {
     // test state
-    const int NUM_TESTS = 3;
     int verbose = 0;
 
     int getopt_char;
@@ -159,18 +160,20 @@ int main(int argc, char**argv)
     // setup
     int argc_1;
     char** argv_1;
-    setup_test_2(&argc_1, &argv_1);
+    setup_test_1(&argc_1, &argv_1);
 
     // test
-    main_decode(argc_1, argv_1);
+    main_decode(argc_1-1, argv_1+1);
 
-    int result = system("diff -y test/decode/out/xxx.sam test/decode/out/6383_9_nosplit_nochange.sam");
+    int result = system("diff test/decode/out/xxx.sam test/decode/out/6383_9_nosplit_nochange.sam");
     if (result) {
         fprintf(stderr, "test 1 failed\n");
         failure++;
     } else {
         success++;
     }
-
-    return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
+    if (verbose) {
+        printf("decode tests: %s\n", failure ? "FAILED" : "Passed");
+    }
+    return failure ? EXIT_FAILURE : EXIT_SUCCESS;
 }
