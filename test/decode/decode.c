@@ -74,21 +74,24 @@ void setup_test_1(int* argc, char*** argv)
     (*argv)[11] = strdup("test/decode/6383_8.tag");
 }
 
-bool check_test_1(const parsed_opts_t* opts) {
-    if ( opts->input_name != NULL
-        || opts->output_name != NULL
-        || opts->verbose == true )
-        return false;
-    return true;
-}
-
-bool check_test_2(const parsed_opts_t* opts) {
-    if ( opts->input_name == NULL
-        || strcmp(opts->input_name, "merged.bam")
-        || opts->output_name != NULL
-        || opts->verbose == true )
-        return false;
-    return true;
+void setup_test_2(int* argc, char*** argv)
+{
+    *argc = 14;
+    *argv = (char**)calloc(sizeof(char*), *argc);
+    (*argv)[0] = strdup("samtools");
+    (*argv)[1] = strdup("decode");
+    (*argv)[2] = strdup("-i");
+    (*argv)[3] = strdup("test/decode/6383_8.sam");
+    (*argv)[4] = strdup("-o");
+    (*argv)[5] = strdup("test/decode/out/xxx.sam");
+    (*argv)[6] = strdup("--output-fmt");
+    (*argv)[7] = strdup("sam");
+    (*argv)[8] = strdup("--input-fmt");
+    (*argv)[9] = strdup("sam");
+    (*argv)[10] = strdup("--barcode-file");
+    (*argv)[11] = strdup("test/decode/6383_8.tag");
+    (*argv)[12] = strdup("--convert-low-quality");
+    (*argv)[13] = strdup("--change-read-name");
 }
 
 void test_noCalls(char *s, int e)
@@ -149,6 +152,7 @@ int main(int argc, char**argv)
     test_noCalls("ABCN",1);
     test_noCalls("NABCN",2);
 
+    // test countMismatches()
     test_countMismatches("ABC","AXC",1);
     test_countMismatches("ABC","XYZ",3);
     test_countMismatches("ABC","ABC",0);
@@ -157,12 +161,14 @@ int main(int argc, char**argv)
     test_countMismatches("NBCiXYZ",".BCNXYz",1);
     test_countMismatches("AGCACGTT","AxCACGTTXXXXXX",1);
 
-    // setup
+    //
+    // Now test the actual decoding
+    //
+
+    // minimal options
     int argc_1;
     char** argv_1;
     setup_test_1(&argc_1, &argv_1);
-
-    // test
     main_decode(argc_1-1, argv_1+1);
 
     int result = system("diff test/decode/out/xxx.sam test/decode/out/6383_9_nosplit_nochange.sam");
@@ -172,8 +178,21 @@ int main(int argc, char**argv)
     } else {
         success++;
     }
-    if (verbose) {
-        printf("decode tests: %s\n", failure ? "FAILED" : "Passed");
+
+    // --convert_low_quality option
+    int argc_2;
+    char** argv_2;
+    setup_test_2(&argc_2, &argv_2);
+    main_decode(argc_2-1, argv_2+1);
+
+    result = system("diff test/decode/out/xxx.sam test/decode/out/6383_8_nosplitN.sam");
+    if (result) {
+        fprintf(stderr, "test 2 failed\n");
+        failure++;
+    } else {
+        success++;
     }
+
+    printf("decode tests: %s\n", failure ? "FAILED" : "Passed");
     return failure ? EXIT_FAILURE : EXIT_SUCCESS;
 }

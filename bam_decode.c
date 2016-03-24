@@ -56,6 +56,7 @@ typedef struct {
     int max_no_calls;
     int max_mismatches;
     int min_mismatch_delta;
+    bool change_read_name;
     char *argv_list;
     sam_global_args ga;
 } parsed_opts_t;
@@ -76,6 +77,7 @@ typedef struct {
     int max_no_calls;
     int max_mismatches;
     int min_mismatch_delta;
+    bool change_read_name;
     char *argv_list;
 } state_t;
 
@@ -115,8 +117,9 @@ static void usage(FILE *write_to)
 "  -q   --max-low-quality-to-convert    Max low quality phred value to convert bases in barcode read to 'N'\n"
 "  -n   --max-no-calls                  Max allowable number of no-calls in a barcode read before it is considered unmatchable\n"
 "  -m   --max-mismatches                Maximum mismatches for a barcode to be considered a match\n"
-"  -d   --min_mismatch_delta            Minimum difference between number of mismatches in the best and second best barcodes for\n"
+"  -d   --min-mismatch-delta            Minimum difference between number of mismatches in the best and second best barcodes for\n"
 "                                       a barcode to be considered a match\n"
+"  -r   --change-read-name              Change the read name by adding #<barcode> suffix\n"
 );
     sam_global_opt_help(write_to, ".-.--");
 }
@@ -134,19 +137,21 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
         SAM_OPT_GLOBAL_OPTIONS(0, '-', 0, '-', '-'),
         { "input",                      1, 0, 'i' },
         { "output",                     1, 0, 'o' },
-        { "verbose",                    1, 0, 'v' },
+        { "verbose",                    0, 0, 'v' },
         { "max-low-quality-to-convert", 1, 0, 'q' },
-        { "convert-low-quality",        1, 0, 'c' },
+        { "convert-low-quality",        0, 0, 'c' },
         { "barcode-file",               1, 0, 'b' },
         { "max-no-calls",               1, 0, 'n' },
         { "max-mismatches",             1, 0, 'm' },
         { "min-mismatch-delta",         1, 0, 'd' },
+        { "change-read-name",           0, 0, 'r' },
         { NULL, 0, NULL, 0 }
     };
 
     parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
     retval->argv_list = stringify_argv(argc+1, argv-1);
+    if (retval->argv_list[strlen(retval->argv_list)-1] == ' ') retval->argv_list[strlen(retval->argv_list)-1] = 0;
 
     sam_global_args_init(&retval->ga);
 
@@ -155,55 +160,42 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
     retval->max_no_calls = DEFAULT_MAX_NO_CALLS;
     retval->max_mismatches = DEFAULT_MAX_MISMATCHES;
     retval->min_mismatch_delta = DEFAULT_MIN_MISMATCH_DELTA;
+    retval->verbose = false;
+    retval->convert_low_quality = false;
+    retval->change_read_name = false;
 
     int opt;
     while ((opt = getopt_long(argc, argv, optstring, lopts, NULL)) != -1) {
         switch (opt) {
-        case 'i':
-            retval->input_name = strdup(optarg);
-            if (! retval->input_name) { perror("cannot allocate input file memory"); return NULL; }
-            break;
-        case 'o':
-            retval->output_name = strdup(optarg);
-            if (! retval->output_name ) { perror("cannot allocate output file memory"); return NULL; }
-            break;
-        case 'b':
-            retval->barcode_name = strdup(optarg);
-            if (! retval->barcode_name ) { perror("cannot allocate barcode file memory"); return NULL; }
-            break;
-        case 'v':
-            retval->verbose = true;
-            break;
-        case 'q':
-            retval->max_low_quality_to_convert = atoi(optarg);
-            break;
-        case 'c':
-            retval->convert_low_quality = atoi(optarg);
-            break;
-        case 'n':
-            retval->max_no_calls = atoi(optarg);
-            break;
-        case 'm':
-            retval->max_mismatches = atoi(optarg);
-            break;
-        case 'd':
-            retval->min_mismatch_delta = atoi(optarg);
-            break;
-        default:
-            if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
+        case 'i':   retval->input_name = strdup(optarg);
+                    break;
+        case 'o':   retval->output_name = strdup(optarg);
+                    break;
+        case 'b':   retval->barcode_name = strdup(optarg);
+                    break;
+        case 'v':   retval->verbose = true;
+                    break;
+        case 'q':   retval->max_low_quality_to_convert = atoi(optarg);
+                    break;
+        case 'c':   retval->convert_low_quality = true;
+                    break;
+        case 'n':   retval->max_no_calls = atoi(optarg);
+                    break;
+        case 'm':   retval->max_mismatches = atoi(optarg);
+                    break;
+        case 'd':   retval->min_mismatch_delta = atoi(optarg);
+                    break;
+        case 'r':   retval->change_read_name = true;
+                    break;
+        default:    if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
             /* else fall-through */
-        case '?':
-            usage(stdout);
-            free(retval);
-            return NULL;
+        case '?':   usage(stdout); free(retval); return NULL;
         }
     }
 
     argc -= optind;
     argv += optind;
-
-    //retval->input_name = strdup(argv[0]);
-    //if (! retval->input_name ) { perror("cannot allocate string memory"); return NULL; }
+    optind = 0;
 
     return retval;
 }
@@ -292,6 +284,7 @@ static state_t* init(parsed_opts_t* opts)
     retval->min_mismatch_delta = opts->min_mismatch_delta;
     retval->convert_low_quality = opts->convert_low_quality;
     retval->max_low_quality_to_convert = opts->max_low_quality_to_convert;
+    retval->change_read_name = opts->change_read_name;
 
     return retval;
 }
@@ -449,7 +442,33 @@ char *makeNewTag(bam1_t *rec, char *tag, char *name)
     return newtag;
 }
 
+/*
+ * Change the read name by adding "#<suffix>"
+ */
+void add_suffix(bam1_t *rec, char *suffix)
+{
+    int oldqlen = strlen((char *)rec->data);
+    int newlen = rec->l_data + strlen(suffix) + 1;
 
+    if (newlen > rec->m_data) {
+        rec->m_data = newlen;
+        kroundup32(rec->m_data);
+        rec->data = (uint8_t *)realloc(rec->data, rec->m_data);
+    }
+    memmove(rec->data + oldqlen + strlen(suffix) + 1,
+            rec->data + oldqlen,
+            rec->l_data - oldqlen);
+    rec->data[oldqlen] = '#';
+    memmove(rec->data + oldqlen + 1,
+            suffix,
+            strlen(suffix) + 1);
+    rec->l_data = newlen;
+    rec->core.l_qname += strlen(suffix) + 1;
+}
+
+/*
+ * Add a new @RG line to the header
+ */
 void addNewRG(SAM_hdr *sh, char *entry, char *bcname, char *lib, char *sample, char *desc)
 {
     char *saveptr;
@@ -561,17 +580,6 @@ void changeHeader(khash_t(bc) *barcodeHash, state_t *state)
     }
     free(rgArray);
 
-/*
-    SAM_hdr_type *hdrline = sam_hdr_find(sh, "RG", NULL, NULL);
-    if (hdrline) {
-        SAM_hdr_tag *t = hdrline->tag;
-        while(t) {
-            printf("TAG: %s\n", t->str);
-            t = t->next;
-        }
-    }
-*/
-
     free(h->text);
     sam_hdr_rebuild(sh);
     h->text = strdup(sam_hdr_str(sh));
@@ -610,11 +618,22 @@ static bool decode(state_t* state)
         uint8_t *p = bam_aux_get(file_read,"RT");
         if (p) {
             char *seq = bam_aux2Z(p);
-            name = findBarcodeName(seq,barcodeHash,state);
+            char *newseq = strdup(seq);
+            if (state->convert_low_quality) {
+                uint8_t *q = bam_aux_get(file_read,"QT");
+                if (q) {
+                    char *qual = bam_aux2Z(q);
+                    free(newseq);
+                    newseq = checkBarcodeQuality(seq,qual,state->max_low_quality_to_convert);
+                }
+            }
+            name = findBarcodeName(newseq,barcodeHash,state);
             if (!name) name = "0";
             char * newtag = makeNewTag(file_read,"RG",name);
             bam_aux_update_str(file_read,"RG",strlen(newtag)+1,(uint8_t*)newtag);
             free(newtag);
+            if (state->change_read_name) add_suffix(file_read, name);
+            free(newseq);
         }
         r2 = sam_write1(state->output_file, state->output_header, file_read);
         if (r2 < 0) {
@@ -629,6 +648,7 @@ static bool decode(state_t* state)
                 bam_aux_update_str(paired_read,"RG",strlen(newtag)+1,(uint8_t*)newtag);
                 free(newtag);
             }
+            if (state->change_read_name) add_suffix(paired_read, name);
             r2 = sam_write1(state->output_file, state->output_header, paired_read);
             if (r2 < 0) {
                 fprintf(stderr, "Could not write sequence\n");
