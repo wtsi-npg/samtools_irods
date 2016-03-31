@@ -44,12 +44,26 @@ DEALINGS IN THE SOFTWARE.  */
 #define DEFAULT_MIN_MISMATCH_DELTA 1
 
 /*
+ * details read from barcode file
+ * Plus metrics information for each barcode
+ */
+typedef struct {
+    char *seq;
+    char *name;
+    char *lib;
+    char *sample;
+    char *desc;
+    int reads, pf_reads, perfect, pf_perfect, one_mismatch, pf_one_mismatch;
+} bc_details_t;
+
+/*
  * structure to hold parsed options
  */
 typedef struct {
     char* input_name;
     char* output_name;
     char* barcode_name;
+    char *metrics_name;
     bool verbose;
     int max_low_quality_to_convert;
     bool convert_low_quality;
@@ -70,6 +84,8 @@ typedef struct {
     samFile* output_file;
     bam_hdr_t* output_header;
     char * barcode_name;
+    char *metrics_name;
+    FILE *metricsFileHandle;
     size_t output_count;
     int tag_length;
     bool convert_low_quality;
@@ -79,18 +95,8 @@ typedef struct {
     int min_mismatch_delta;
     bool change_read_name;
     char *argv_list;
+    bc_details_t *nullMetric;
 } state_t;
-
-/*
- * details read from barcode file
- */
-typedef struct {
-    char *seq;
-    char *name;
-    char *lib;
-    char *sample;
-    char *desc;
-} bc_details_t;
 
 // Create a hash map to hold barcode information
 // Key is 'barcode sequence'
@@ -120,6 +126,7 @@ static void usage(FILE *write_to)
 "  -d   --min-mismatch-delta            Minimum difference between number of mismatches in the best and second best barcodes for\n"
 "                                       a barcode to be considered a match\n"
 "  -r   --change-read-name              Change the read name by adding #<barcode> suffix\n"
+"  -t   --metrics-file                  Output file to write metrics to\n"
 );
     sam_global_opt_help(write_to, ".-.--");
 }
@@ -131,7 +138,7 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "i:o:vqcb:n:m:d:";
+    const char* optstring = "i:o:vqcb:n:m:d:t:";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS(0, '-', 0, '-', '-'),
@@ -145,6 +152,7 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
         { "max-mismatches",             1, 0, 'm' },
         { "min-mismatch-delta",         1, 0, 'd' },
         { "change-read-name",           0, 0, 'r' },
+        { "metrics-file",               1, 0, 't' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -172,6 +180,8 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
         case 'o':   retval->output_name = strdup(optarg);
                     break;
         case 'b':   retval->barcode_name = strdup(optarg);
+                    break;
+        case 't':   retval->metrics_name = strdup(optarg);
                     break;
         case 'v':   retval->verbose = true;
                     break;
@@ -240,6 +250,7 @@ static state_t* init(parsed_opts_t* opts)
     }
 
     retval->argv_list = opts->argv_list;
+    retval->nullMetric = calloc(1,sizeof(bc_details_t));
 
     retval->input_file = sam_open_format(opts->input_name, "rb", &opts->ga.in);
     if (!retval->input_file) {
@@ -279,6 +290,7 @@ static state_t* init(parsed_opts_t* opts)
     free(input_base_name);
 
     retval->barcode_name = strdup(opts->barcode_name);
+    retval->metrics_name = opts->metrics_name ? strdup(opts->metrics_name) : NULL;
     retval->max_no_calls = opts->max_no_calls;
     retval->max_mismatches = opts->max_mismatches;
     retval->min_mismatch_delta = opts->min_mismatch_delta;
@@ -286,7 +298,99 @@ static state_t* init(parsed_opts_t* opts)
     retval->max_low_quality_to_convert = opts->max_low_quality_to_convert;
     retval->change_read_name = opts->change_read_name;
 
+    if (retval->metrics_name) {
+        retval->metricsFileHandle = fopen(retval->metrics_name,"w");
+        if (!retval->metricsFileHandle) {
+            perror("Open failed");
+        }
+    } else {
+        retval->metricsFileHandle = NULL;
+    }
+
     return retval;
+}
+
+void writeMetricsLine(bc_details_t *bcd, state_t *state, int total_reads, int max_reads, int total_pf_reads, int max_pf_reads, int total_pf_reads_assigned, int nReads)
+{
+    FILE *f = state->metricsFileHandle;
+    char *Nseq = NULL;
+
+    if (!bcd->seq) {
+        Nseq = calloc(1,state->tag_length+1);
+        memset(Nseq,'N', state->tag_length);
+    }
+
+    fprintf(f, "%s\t", bcd->seq ? bcd->seq : Nseq);
+    fprintf(f, "%s\t", bcd->name ? bcd->name : "" );
+    fprintf(f, "%s\t", bcd->lib ? bcd->lib : "" );
+    fprintf(f, "%s\t", bcd->sample ? bcd->sample : "" );
+    fprintf(f, "%s\t", bcd->desc ? bcd->desc : "" );
+    fprintf(f, "%d\t", bcd->reads);
+    fprintf(f, "%d\t", bcd->pf_reads);
+    fprintf(f, "%d\t", bcd->perfect);
+    fprintf(f, "%d\t", bcd->pf_perfect);
+    fprintf(f, "%d\t", bcd->one_mismatch);
+    fprintf(f, "%d\t", bcd->pf_one_mismatch);
+    fprintf(f, "%f\t", total_reads ? bcd->reads / (double)total_reads : 0 );
+    fprintf(f, "%f\t", max_reads ? bcd->reads / (double)max_reads : 0 );
+    fprintf(f, "%f\t", total_pf_reads ? bcd->pf_reads / (double)total_pf_reads : 0 );
+    fprintf(f, "%f\t", max_pf_reads ? bcd->pf_reads / (double)max_pf_reads : 0 );
+    fprintf(f, "%f\t", total_pf_reads_assigned ? bcd->pf_reads * nReads / (double)total_pf_reads_assigned : 0);
+    fprintf(f, "\n");
+
+    if (Nseq) free(Nseq);
+}
+
+/*
+ *
+ */
+void writeMetrics(khash_t(bc) *barcodeHash, state_t *state)
+{
+    khiter_t iter;
+    int total_reads = state->nullMetric->reads;
+    int total_pf_reads = state->nullMetric->pf_reads;
+    int total_pf_reads_assigned = 0;
+    int max_reads = state->nullMetric->reads;
+    int max_pf_reads = state->nullMetric->pf_reads;
+    int nReads = 0;
+
+    // first loop to count things
+    for (iter = kh_begin(barcodeHash); iter != kh_end(barcodeHash); ++iter) {
+        if (!kh_exist(barcodeHash,iter)) continue;
+        bc_details_t *bcd = kh_val(barcodeHash,iter);
+        total_reads += bcd->reads;
+        total_pf_reads += bcd->pf_reads;
+        total_pf_reads_assigned += bcd->pf_reads;
+        if (max_reads < bcd->reads) max_reads = bcd->reads;
+        if (max_pf_reads < bcd->pf_reads) max_pf_reads = bcd->pf_reads;
+        nReads++;
+    }
+
+    // print header
+    fprintf(state->metricsFileHandle, "BARCODE\t");
+    fprintf(state->metricsFileHandle, "BARCODE_NAME\t");
+    fprintf(state->metricsFileHandle, "LIBRARY_NAME\t");
+    fprintf(state->metricsFileHandle, "SAMPLE_NAME\t");
+    fprintf(state->metricsFileHandle, "DESCRIPTION READS\t");
+    fprintf(state->metricsFileHandle, "PF_READS\t");
+    fprintf(state->metricsFileHandle, "PERFECT_MATCHES\t");
+    fprintf(state->metricsFileHandle, "PF_PERFECT_MATCHES\t");
+    fprintf(state->metricsFileHandle, "ONE_MISMATCH_MATCHES\t");
+    fprintf(state->metricsFileHandle, "PF_ONE_MISMATCH_MATCHES\t");
+    fprintf(state->metricsFileHandle, "PCT_MATCHES\t");
+    fprintf(state->metricsFileHandle, "RATIO_THIS_BARCODE_TO_BEST_BARCODE_PCT\t");
+    fprintf(state->metricsFileHandle, "PF_PCT_MATCHES\t");
+    fprintf(state->metricsFileHandle, "PF_RATIO_THIS_BARCODE_TO_BEST_BARCODE_PCT\t");
+    fprintf(state->metricsFileHandle, "PF_NORMALIZED_MATCHES\n");
+
+
+    // second loop to print things
+    for (iter = kh_begin(barcodeHash); iter != kh_end(barcodeHash); ++iter) {
+        if (!kh_exist(barcodeHash,iter)) continue;
+        bc_details_t *bcd = kh_val(barcodeHash,iter);
+        writeMetricsLine(bcd, state, total_reads, max_reads, total_pf_reads, max_pf_reads, total_pf_reads_assigned, nReads);
+    }
+    writeMetricsLine(state->nullMetric, state, total_reads, max_reads, total_pf_reads, max_pf_reads, 0, nReads);
 }
 
 /*
@@ -311,7 +415,7 @@ khash_t(bc) *loadBarcodeFile(state_t *state)
         char *s;
         int res;
         if (buf[strlen(buf)-1] == '\n') buf[strlen(buf)-1]=0;   // remove trailing lf
-        bc_details_t *bcd = malloc(sizeof(bc_details_t));
+        bc_details_t *bcd = calloc(1,sizeof(bc_details_t));
         s = strtok(buf,"\t");  bcd->seq     = strdup(s);
         s = strtok(NULL,"\t"); bcd->name    = strdup(s);
         s = strtok(NULL,"\t"); bcd->lib     = strdup(s);
@@ -414,16 +518,40 @@ static char *findBestMatch(char *barcode, khash_t(bc) *barcodeHash, state_t *sta
 }
 
 /*
+ * Update the metrics information
+ */
+void updateMetrics(bc_details_t *bcd, char *seq, bool isPf)
+{
+    int n = 99;
+    if (seq) n = countMismatches(bcd->seq, seq);
+
+    bcd->reads++;
+    if (isPf) bcd->pf_reads++;
+
+    if (n==0) {     // count perfect matches
+        bcd->perfect++;
+        if (isPf) bcd->pf_perfect++;
+    }
+
+    if (n==1) {     // count out-by-one matches
+        bcd->one_mismatch++;
+        if (isPf) bcd->pf_one_mismatch++;
+    }
+        
+}
+
+/*
  * find the best match in the barcode (tag) file, and return the corresponding barcode name
  * return NULL if no match found
  */
-static char *findBarcodeName(char *barcode, khash_t(bc) *barcodeHash, state_t *state)
+static char *findBarcodeName(char *barcode, khash_t(bc) *barcodeHash, state_t *state, bool isPf)
 {
     char *seq = findBestMatch(barcode, barcodeHash, state);
-    if (!seq) return NULL;
+    if (!seq) { updateMetrics(state->nullMetric, seq, isPf); return NULL; }
     khint_t k = kh_get(bc,barcodeHash,seq);
     assert(k != kh_end(barcodeHash));
     bc_details_t *bcd = kh_val(barcodeHash,k);
+    updateMetrics(bcd, barcode, isPf);
     return bcd->name;
 }
 
@@ -627,7 +755,7 @@ static bool decode(state_t* state)
                     newseq = checkBarcodeQuality(seq,qual,state->max_low_quality_to_convert);
                 }
             }
-            name = findBarcodeName(newseq,barcodeHash,state);
+            name = findBarcodeName(newseq,barcodeHash,state,!(file_read->core.flag & BAM_FQCFAIL));
             if (!name) name = "0";
             char * newtag = makeNewTag(file_read,"RG",name);
             bam_aux_update_str(file_read,"RG",strlen(newtag)+1,(uint8_t*)newtag);
@@ -657,6 +785,8 @@ static bool decode(state_t* state)
         }
     }
 
+    if (state->metricsFileHandle) writeMetrics(barcodeHash, state);
+
     return true;
 }
 
@@ -669,6 +799,8 @@ static int cleanup_state(state_t* status)
     if (status->output_file) ret |= sam_close(status->output_file);
     sam_close(status->input_file);
     bam_hdr_destroy(status->input_header);
+    if (status->metricsFileHandle) fclose(status->metricsFileHandle); 
+    status->metricsFileHandle=NULL;
     free(status);
 
     return ret;

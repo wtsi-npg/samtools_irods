@@ -38,27 +38,9 @@ const char * samtools_version(void)
 int success = 0;
 int failure = 0;
 
-void xxx_setup_test_1(int* argc, char*** argv)
-{
-    *argc = 12;
-    *argv = (char**)calloc(sizeof(char*), *argc);
-    (*argv)[0] = strdup("samtools");
-    (*argv)[1] = strdup("decode");
-    (*argv)[2] = strdup("-i");
-    (*argv)[3] = strdup("test/decode/6383_8.sam");
-    (*argv)[4] = strdup("-o");
-    (*argv)[5] = strdup("test/decode/out/xxx.sam");
-    (*argv)[6] = strdup("--output-fmt");
-    (*argv)[7] = strdup("sam");
-    (*argv)[8] = strdup("--input-fmt");
-    (*argv)[9] = strdup("sam");
-    (*argv)[10] = strdup("--barcode-file");
-    (*argv)[11] = strdup("test/decode/6383_8.tag");
-}
-
 void setup_test_1(int* argc, char*** argv)
 {
-    *argc = 12;
+    *argc = 14;
     *argv = (char**)calloc(sizeof(char*), *argc);
     (*argv)[0] = strdup("samtools");
     (*argv)[1] = strdup("decode");
@@ -72,11 +54,13 @@ void setup_test_1(int* argc, char*** argv)
     (*argv)[9] = strdup("sam");
     (*argv)[10] = strdup("--barcode-file");
     (*argv)[11] = strdup("test/decode/6383_8.tag");
+    (*argv)[12] = strdup("--metrics-file");
+    (*argv)[13] = strdup("test/decode/out/6383_9.metrics");
 }
 
 void setup_test_2(int* argc, char*** argv)
 {
-    *argc = 14;
+    *argc = 16;
     *argv = (char**)calloc(sizeof(char*), *argc);
     (*argv)[0] = strdup("samtools");
     (*argv)[1] = strdup("decode");
@@ -92,6 +76,8 @@ void setup_test_2(int* argc, char*** argv)
     (*argv)[11] = strdup("test/decode/6383_8.tag");
     (*argv)[12] = strdup("--convert-low-quality");
     (*argv)[13] = strdup("--change-read-name");
+    (*argv)[14] = strdup("--metrics-file");
+    (*argv)[15] = strdup("test/decode/out/6383_8.metrics");
 }
 
 void test_noCalls(char *s, int e)
