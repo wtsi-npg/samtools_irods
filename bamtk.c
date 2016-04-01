@@ -133,7 +133,7 @@ static void usage(FILE *fp)
 "     quickcheck     quickly check if SAM/BAM/CRAM file appears intact\n"
 "     fastq          converts a BAM to a FASTQ\n"
 "     fasta          converts a BAM to a FASTA\n"
-"     decode         decode a SAM/BAM/CRAM file by read groups\n"
+"     decode         decode a multiplexed SAM/BAM/CRAM file by read groups\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
