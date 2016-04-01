@@ -23,7 +23,7 @@
 
 CC       = gcc
 CPPFLAGS =
-CFLAGS   = -g -Wall -O0
+CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LIBS     =
 
