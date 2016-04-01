@@ -36,7 +36,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o
+            bam_quickcheck.o bam_addrprg.o bam_decode.o
 
 prefix      = /usr/local
 exec_prefix = $(prefix)
@@ -75,6 +75,7 @@ BUILT_TEST_PROGRAMS = \
 	test/split/test_expand_format_string \
 	test/split/test_filter_header_rg \
 	test/split/test_parse_args \
+	test/decode/decode \
 	test/vcf-miniview
 
 all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
@@ -167,6 +168,7 @@ bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) $(bam_h) $(htsli
 bam_rmdupse.o: bam_rmdupse.c config.h $(bam_h) $(htslib_sam_h) $(htslib_khash_h) $(htslib_klist_h)
 bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(sam_opts_h)
 bam_split.o: bam_split.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(sam_opts_h)
+bam_decode.o: bam_decode.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(sam_opts_h)
 bam_stat.o: bam_stat.c config.h $(htslib_sam_h) samtools.h
 bam_tview.o: bam_tview.c config.h $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(sam_opts_h)
 bam_tview_curses.o: bam_tview_curses.c config.h $(bam_tview_h)
@@ -208,7 +210,7 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/split/test_expand_format_string
 	test/split/test_filter_header_rg
 	test/split/test_parse_args
-
+	test/decode/decode
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB)
 	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
@@ -231,6 +233,9 @@ test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o
 test/split/test_parse_args: test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB)
 	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
 
+test/decode/decode: test/decode/decode.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/decode/decode.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+
 test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
 	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB_LIB) $(ALL_LIBS)
 
@@ -243,6 +248,7 @@ test/split/test_count_rg.o: test/split/test_count_rg.c config.h bam_split.o $(te
 test/split/test_expand_format_string.o: test/split/test_expand_format_string.c config.h bam_split.o $(test_test_h)
 test/split/test_filter_header_rg.o: test/split/test_filter_header_rg.c config.h bam_split.o $(test_test_h)
 test/split/test_parse_args.o: test/split/test_parse_args.c config.h bam_split.o $(test_test_h)
+test/decode/decode.o: test/decode/decode.c config.h bam_decode.o $(test_test_h)
 test/test.o: test/test.c config.h $(htslib_sam_h) $(test_test_h)
 test/vcf-miniview.o: test/vcf-miniview.c config.h $(htslib_vcf_h)
 
