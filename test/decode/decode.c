@@ -40,7 +40,7 @@ int failure = 0;
 
 void setup_test_1(int* argc, char*** argv)
 {
-    *argc = 14;
+    *argc = 16;
     *argv = (char**)calloc(sizeof(char*), *argc);
     (*argv)[0] = strdup("samtools");
     (*argv)[1] = strdup("decode");
@@ -56,11 +56,13 @@ void setup_test_1(int* argc, char*** argv)
     (*argv)[11] = strdup("test/decode/6383_8.tag");
     (*argv)[12] = strdup("--metrics-file");
     (*argv)[13] = strdup("test/decode/out/6383_9.metrics");
+    (*argv)[14] = strdup("--barcode-tag-name");
+    (*argv)[15] = strdup("RT");
 }
 
 void setup_test_2(int* argc, char*** argv)
 {
-    *argc = 16;
+    *argc = 18;
     *argv = (char**)calloc(sizeof(char*), *argc);
     (*argv)[0] = strdup("samtools");
     (*argv)[1] = strdup("decode");
@@ -78,6 +80,8 @@ void setup_test_2(int* argc, char*** argv)
     (*argv)[13] = strdup("--change-read-name");
     (*argv)[14] = strdup("--metrics-file");
     (*argv)[15] = strdup("test/decode/out/6383_8.metrics");
+    (*argv)[16] = strdup("--barcode-tag-name");
+    (*argv)[17] = strdup("RT");
 }
 
 void test_noCalls(char *s, int e)
