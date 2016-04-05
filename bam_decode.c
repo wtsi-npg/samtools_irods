@@ -221,9 +221,6 @@ static opts_t* parse_args(int argc, char *argv[])
     argv += optind;
     optind = 0;
 
-    printf("argc = %d\n", argc);
-    printf("argv = %s\n", argv[0]);
-
     return retval;
 }
 
@@ -386,6 +383,18 @@ void writeMetrics(khash_t(bc) *barcodeHash, state_t *state)
     }
 
     // print header
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "# ");
+    fprintf(state->metricsFileHandle, "BARCODE_TAG_NAME=%s ", state->barcode_tag_name);
+    fprintf(state->metricsFileHandle, "MAX_MISMATCHES=%d ", state->max_mismatches);
+    fprintf(state->metricsFileHandle, "MIN_MISMATCH_DELTA=%d ", state->min_mismatch_delta);
+    fprintf(state->metricsFileHandle, "MAX_NO_CALLS=%d ", state->max_no_calls);
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "#\n");
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+
     fprintf(state->metricsFileHandle, "BARCODE\t");
     fprintf(state->metricsFileHandle, "BARCODE_NAME\t");
     fprintf(state->metricsFileHandle, "LIBRARY_NAME\t");
