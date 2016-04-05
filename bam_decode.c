@@ -59,7 +59,7 @@ typedef struct {
 } bc_details_t;
 
 /*
- * structure to hold parsed options
+ * structure to hold options
  */
 typedef struct {
     char* input_name;
@@ -77,7 +77,7 @@ typedef struct {
     bool change_read_name;
     char *argv_list;
     sam_global_args ga;
-} parsed_opts_t;
+} opts_t;
 
 /*
  * hold state information
@@ -92,7 +92,6 @@ typedef struct {
     FILE *metricsFileHandle;
     char *barcode_tag_name;
     char *quality_tag_name;
-    size_t output_count;
     int tag_length;
     bool convert_low_quality;
     int max_low_quality_to_convert;
@@ -110,7 +109,7 @@ typedef struct {
 KHASH_MAP_INIT_STR(bc, bc_details_t *)
 
 static int cleanup_state(state_t* status);
-static void cleanup_opts(parsed_opts_t* opts);
+static void cleanup_opts(opts_t* opts);
 
 /*
  * display usage information
@@ -118,10 +117,9 @@ static void cleanup_opts(parsed_opts_t* opts);
 static void usage(FILE *write_to)
 {
     fprintf(write_to,
-"Usage: samtools decode [options]\n"
+"Usage: samtools decode [options] filename\n"
 "\n"
 "Options:\n"
-"  -i   --input                         input file [default: stdin]\n"
 "  -o   --output                        output file [default: stdout]\n"
 "  -v   --verbose                       verbose output\n"
 "  -b   --barcode-file                  file containing barcodes\n"
@@ -142,7 +140,7 @@ static void usage(FILE *write_to)
 /*
  * Takes the command line options and turns them into something we can understand
  */
-static parsed_opts_t* parse_args(int argc, char *argv[])
+static opts_t* parse_args(int argc, char *argv[])
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
@@ -166,7 +164,7 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
+    opts_t* retval = calloc(sizeof(opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
     retval->argv_list = stringify_argv(argc+1, argv-1);
     if (retval->argv_list[strlen(retval->argv_list)-1] == ' ') retval->argv_list[strlen(retval->argv_list)-1] = 0;
@@ -257,7 +255,7 @@ static char *checkBarcodeQuality(char * barcode, char *quality, int max_low_qual
 }
 
 // Set the initial state
-static state_t* init(parsed_opts_t* opts)
+static state_t* init(opts_t* opts)
 {
     state_t* retval = calloc(sizeof(state_t), 1);
     if (!retval) {
@@ -385,11 +383,24 @@ void writeMetrics(khash_t(bc) *barcodeHash, state_t *state)
     }
 
     // print header
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "# ");
+    fprintf(state->metricsFileHandle, "BARCODE_TAG_NAME=%s ", state->barcode_tag_name);
+    fprintf(state->metricsFileHandle, "MAX_MISMATCHES=%d ", state->max_mismatches);
+    fprintf(state->metricsFileHandle, "MIN_MISMATCH_DELTA=%d ", state->min_mismatch_delta);
+    fprintf(state->metricsFileHandle, "MAX_NO_CALLS=%d ", state->max_no_calls);
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "#\n");
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+
     fprintf(state->metricsFileHandle, "BARCODE\t");
     fprintf(state->metricsFileHandle, "BARCODE_NAME\t");
     fprintf(state->metricsFileHandle, "LIBRARY_NAME\t");
     fprintf(state->metricsFileHandle, "SAMPLE_NAME\t");
-    fprintf(state->metricsFileHandle, "DESCRIPTION READS\t");
+    fprintf(state->metricsFileHandle, "DESCRIPTION\t");
+    fprintf(state->metricsFileHandle, "READS\t");
     fprintf(state->metricsFileHandle, "PF_READS\t");
     fprintf(state->metricsFileHandle, "PERFECT_MATCHES\t");
     fprintf(state->metricsFileHandle, "PF_PERFECT_MATCHES\t");
@@ -824,7 +835,7 @@ static int cleanup_state(state_t* status)
     return ret;
 }
 
-static void cleanup_opts(parsed_opts_t* opts)
+static void cleanup_opts(opts_t* opts)
 {
     if (!opts) return;
     free(opts->input_name);
@@ -836,7 +847,7 @@ static void cleanup_opts(parsed_opts_t* opts)
 int main_decode(int argc, char *argv[])
 {
     int ret = 1;
-    parsed_opts_t* opts = parse_args(argc, argv);
+    opts_t* opts = parse_args(argc, argv);
     if (opts) {
         if (opts->verbose) fprintf(stderr, "options parsed ok\n");
         state_t* status = init(opts);
