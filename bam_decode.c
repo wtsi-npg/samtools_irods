@@ -353,7 +353,7 @@ void writeMetricsLine(bc_details_t *bcd, state_t *state, int total_reads, int ma
     fprintf(f, "%f\t", max_reads ? bcd->reads / (double)max_reads : 0 );
     fprintf(f, "%f\t", total_pf_reads ? bcd->pf_reads / (double)total_pf_reads : 0 );
     fprintf(f, "%f\t", max_pf_reads ? bcd->pf_reads / (double)max_pf_reads : 0 );
-    fprintf(f, "%f\t", total_pf_reads_assigned ? bcd->pf_reads * nReads / (double)total_pf_reads_assigned : 0);
+    fprintf(f, "%f", total_pf_reads_assigned ? bcd->pf_reads * nReads / (double)total_pf_reads_assigned : 0);
     fprintf(f, "\n");
 
     if (Nseq) free(Nseq);
