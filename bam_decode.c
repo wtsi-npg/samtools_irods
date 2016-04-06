@@ -219,6 +219,8 @@ static opts_t* parse_args(int argc, char *argv[])
 
     argc -= optind;
     argv += optind;
+
+    if (argc > 0) retval->input_name = strdup(argv[0]);
     optind = 0;
 
     return retval;
@@ -266,6 +268,7 @@ static state_t* init(opts_t* opts)
     retval->argv_list = opts->argv_list;
     retval->nullMetric = calloc(1,sizeof(bc_details_t));
 
+    if (strcmp(opts->input_name, "-") == 0) opts->input_name = strdup("/dev/stdin");
     retval->input_file = sam_open_format(opts->input_name, "rb", &opts->ga.in);
     if (!retval->input_file) {
         fprintf(stderr, "Could not open input file (%s)\n", opts->input_name);
@@ -280,15 +283,15 @@ static state_t* init(opts_t* opts)
         return NULL;
     }
 
-    if (opts->output_name) {
-        retval->output_header = bam_hdr_dup(retval->input_header);
+    if (!opts->output_name || (strcmp(opts->output_name,"-") == 0)) opts->output_name = strdup("/dev/stdout");
 
-        retval->output_file = sam_open_format(opts->output_name, "wb", &opts->ga.out);
-        if (retval->output_file == NULL) {
-            fprintf(stderr, "Could not open output file: %s\n", opts->output_name);
-            cleanup_state(retval);
-            return NULL;
-        }
+    retval->output_header = bam_hdr_dup(retval->input_header);
+
+    retval->output_file = sam_open_format(opts->output_name, "wb", &opts->ga.out);
+    if (retval->output_file == NULL) {
+        fprintf(stderr, "Could not open output file: %s\n", opts->output_name);
+        cleanup_state(retval);
+        return NULL;
     }
 
     char* dirsep = strrchr(opts->input_name, '/');
