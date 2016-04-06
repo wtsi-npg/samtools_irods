@@ -76,6 +76,7 @@ typedef struct {
     int min_mismatch_delta;
     bool change_read_name;
     char *argv_list;
+    char *compression_level;
     sam_global_args ga;
 } opts_t;
 
@@ -100,6 +101,7 @@ typedef struct {
     int min_mismatch_delta;
     bool change_read_name;
     char *argv_list;
+    char *compression_level;
     bc_details_t *nullMetric;
 } state_t;
 
@@ -133,8 +135,9 @@ static void usage(FILE *write_to)
 "  -t   --metrics-file                  Per-barcode and per-lane metrics written to this file\n"
 "       --barcode-tag-name              Barcode tag name [default: " DEFAULT_BARCODE_TAG "]\n"
 "       --quality-tag-name              Quality tag name [default: " DEFAULT_QUALITY_TAG "]\n"
+"  -l   --compression-level             Compression level for output [0..9]\n"
 );
-    sam_global_opt_help(write_to, ".-.--");
+    sam_global_opt_help(write_to, "....-");
 }
 
 /*
@@ -144,10 +147,10 @@ static opts_t* parse_args(int argc, char *argv[])
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "i:o:vqcb:n:m:d:t:z:y:";
+    const char* optstring = "i:o:vqcb:n:m:d:t:z:y:l:";
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS(0, '-', 0, '-', '-'),
+        SAM_OPT_GLOBAL_OPTIONS(0, 0, 0, 0, '-'),
         { "input",                      1, 0, 'i' },
         { "output",                     1, 0, 'o' },
         { "verbose",                    0, 0, 'v' },
@@ -161,6 +164,7 @@ static opts_t* parse_args(int argc, char *argv[])
         { "metrics-file",               1, 0, 't' },
         { "barcode-tag-name",           1, 0, 'z' },
         { "quality-tag-name",           1, 0, 'y' },
+        { "compression-level",          1, 0, 'l' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -181,6 +185,7 @@ static opts_t* parse_args(int argc, char *argv[])
     retval->change_read_name = false;
     retval->barcode_tag_name = DEFAULT_BARCODE_TAG;
     retval->quality_tag_name = DEFAULT_QUALITY_TAG;
+    retval->compression_level = NULL;
 
     int opt;
     while ((opt = getopt_long(argc, argv, optstring, lopts, NULL)) != -1) {
@@ -210,6 +215,8 @@ static opts_t* parse_args(int argc, char *argv[])
         case 'z':   retval->barcode_tag_name = strdup(optarg);
                     break;
         case 'y':   retval->quality_tag_name = strdup(optarg);
+                    break;
+        case 'l':   retval->compression_level = strdup(optarg);
                     break;
         default:    if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
             /* else fall-through */
@@ -287,7 +294,13 @@ static state_t* init(opts_t* opts)
 
     retval->output_header = bam_hdr_dup(retval->input_header);
 
-    retval->output_file = sam_open_format(opts->output_name, "wb", &opts->ga.out);
+    char mode[] = "wb ";
+    if (opts->compression_level) {
+        mode[2] = *opts->compression_level;
+    } else {
+        mode[2] = 0;
+    }
+    retval->output_file = sam_open_format(opts->output_name, mode, &opts->ga.out);
     if (retval->output_file == NULL) {
         fprintf(stderr, "Could not open output file: %s\n", opts->output_name);
         cleanup_state(retval);
@@ -316,6 +329,7 @@ static state_t* init(opts_t* opts)
     retval->change_read_name = opts->change_read_name;
     retval->barcode_tag_name = strdup(opts->barcode_tag_name);
     retval->quality_tag_name = strdup(opts->quality_tag_name);
+    retval->compression_level = opts->compression_level ? strdup(opts->compression_level) : NULL;
 
     if (retval->metrics_name) {
         retval->metricsFileHandle = fopen(retval->metrics_name,"w");
