@@ -42,6 +42,8 @@ DEALINGS IN THE SOFTWARE.  */
 #define DEFAULT_MAX_NO_CALLS 2
 #define DEFAULT_MAX_MISMATCHES 1
 #define DEFAULT_MIN_MISMATCH_DELTA 1
+#define DEFAULT_BARCODE_TAG "BC"
+#define DEFAULT_QUALITY_TAG "QT"
 
 /*
  * details read from barcode file
@@ -57,13 +59,15 @@ typedef struct {
 } bc_details_t;
 
 /*
- * structure to hold parsed options
+ * structure to hold options
  */
 typedef struct {
     char* input_name;
     char* output_name;
     char* barcode_name;
     char *metrics_name;
+    char *barcode_tag_name;
+    char *quality_tag_name;
     bool verbose;
     int max_low_quality_to_convert;
     bool convert_low_quality;
@@ -72,8 +76,9 @@ typedef struct {
     int min_mismatch_delta;
     bool change_read_name;
     char *argv_list;
+    char *compression_level;
     sam_global_args ga;
-} parsed_opts_t;
+} opts_t;
 
 /*
  * hold state information
@@ -86,7 +91,8 @@ typedef struct {
     char * barcode_name;
     char *metrics_name;
     FILE *metricsFileHandle;
-    size_t output_count;
+    char *barcode_tag_name;
+    char *quality_tag_name;
     int tag_length;
     bool convert_low_quality;
     int max_low_quality_to_convert;
@@ -95,6 +101,7 @@ typedef struct {
     int min_mismatch_delta;
     bool change_read_name;
     char *argv_list;
+    char *compression_level;
     bc_details_t *nullMetric;
 } state_t;
 
@@ -104,7 +111,7 @@ typedef struct {
 KHASH_MAP_INIT_STR(bc, bc_details_t *)
 
 static int cleanup_state(state_t* status);
-static void cleanup_opts(parsed_opts_t* opts);
+static void cleanup_opts(opts_t* opts);
 
 /*
  * display usage information
@@ -112,10 +119,9 @@ static void cleanup_opts(parsed_opts_t* opts);
 static void usage(FILE *write_to)
 {
     fprintf(write_to,
-"Usage: samtools decode [options]\n"
+"Usage: samtools decode [options] filename\n"
 "\n"
 "Options:\n"
-"  -i   --input                         input file [default: stdin]\n"
 "  -o   --output                        output file [default: stdout]\n"
 "  -v   --verbose                       verbose output\n"
 "  -b   --barcode-file                  file containing barcodes\n"
@@ -126,22 +132,25 @@ static void usage(FILE *write_to)
 "  -d   --min-mismatch-delta            Minimum difference between number of mismatches in the best and second best barcodes for\n"
 "                                       a barcode to be considered a match\n"
 "  -r   --change-read-name              Change the read name by adding #<barcode> suffix\n"
-"  -t   --metrics-file                  Output file to write metrics to\n"
+"  -t   --metrics-file                  Per-barcode and per-lane metrics written to this file\n"
+"       --barcode-tag-name              Barcode tag name [default: " DEFAULT_BARCODE_TAG "]\n"
+"       --quality-tag-name              Quality tag name [default: " DEFAULT_QUALITY_TAG "]\n"
+"  -l   --compression-level             Compression level for output [0..9]\n"
 );
-    sam_global_opt_help(write_to, ".-.--");
+    sam_global_opt_help(write_to, "....-");
 }
 
 /*
  * Takes the command line options and turns them into something we can understand
  */
-static parsed_opts_t* parse_args(int argc, char *argv[])
+static opts_t* parse_args(int argc, char *argv[])
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "i:o:vqcb:n:m:d:t:";
+    const char* optstring = "i:o:vqcb:n:m:d:t:z:y:l:";
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS(0, '-', 0, '-', '-'),
+        SAM_OPT_GLOBAL_OPTIONS(0, 0, 0, 0, '-'),
         { "input",                      1, 0, 'i' },
         { "output",                     1, 0, 'o' },
         { "verbose",                    0, 0, 'v' },
@@ -153,10 +162,13 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
         { "min-mismatch-delta",         1, 0, 'd' },
         { "change-read-name",           0, 0, 'r' },
         { "metrics-file",               1, 0, 't' },
+        { "barcode-tag-name",           1, 0, 'z' },
+        { "quality-tag-name",           1, 0, 'y' },
+        { "compression-level",          1, 0, 'l' },
         { NULL, 0, NULL, 0 }
     };
 
-    parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
+    opts_t* retval = calloc(sizeof(opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
     retval->argv_list = stringify_argv(argc+1, argv-1);
     if (retval->argv_list[strlen(retval->argv_list)-1] == ' ') retval->argv_list[strlen(retval->argv_list)-1] = 0;
@@ -171,6 +183,9 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
     retval->verbose = false;
     retval->convert_low_quality = false;
     retval->change_read_name = false;
+    retval->barcode_tag_name = DEFAULT_BARCODE_TAG;
+    retval->quality_tag_name = DEFAULT_QUALITY_TAG;
+    retval->compression_level = NULL;
 
     int opt;
     while ((opt = getopt_long(argc, argv, optstring, lopts, NULL)) != -1) {
@@ -197,6 +212,12 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
                     break;
         case 'r':   retval->change_read_name = true;
                     break;
+        case 'z':   retval->barcode_tag_name = strdup(optarg);
+                    break;
+        case 'y':   retval->quality_tag_name = strdup(optarg);
+                    break;
+        case 'l':   retval->compression_level = strdup(optarg);
+                    break;
         default:    if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
             /* else fall-through */
         case '?':   usage(stdout); free(retval); return NULL;
@@ -205,6 +226,8 @@ static parsed_opts_t* parse_args(int argc, char *argv[])
 
     argc -= optind;
     argv += optind;
+
+    if (argc > 0) retval->input_name = strdup(argv[0]);
     optind = 0;
 
     return retval;
@@ -241,7 +264,7 @@ static char *checkBarcodeQuality(char * barcode, char *quality, int max_low_qual
 }
 
 // Set the initial state
-static state_t* init(parsed_opts_t* opts)
+static state_t* init(opts_t* opts)
 {
     state_t* retval = calloc(sizeof(state_t), 1);
     if (!retval) {
@@ -252,6 +275,7 @@ static state_t* init(parsed_opts_t* opts)
     retval->argv_list = opts->argv_list;
     retval->nullMetric = calloc(1,sizeof(bc_details_t));
 
+    if (strcmp(opts->input_name, "-") == 0) opts->input_name = strdup("/dev/stdin");
     retval->input_file = sam_open_format(opts->input_name, "rb", &opts->ga.in);
     if (!retval->input_file) {
         fprintf(stderr, "Could not open input file (%s)\n", opts->input_name);
@@ -266,15 +290,21 @@ static state_t* init(parsed_opts_t* opts)
         return NULL;
     }
 
-    if (opts->output_name) {
-        retval->output_header = bam_hdr_dup(retval->input_header);
+    if (!opts->output_name || (strcmp(opts->output_name,"-") == 0)) opts->output_name = strdup("/dev/stdout");
 
-        retval->output_file = sam_open_format(opts->output_name, "wb", &opts->ga.out);
-        if (retval->output_file == NULL) {
-            fprintf(stderr, "Could not open output file: %s\n", opts->output_name);
-            cleanup_state(retval);
-            return NULL;
-        }
+    retval->output_header = bam_hdr_dup(retval->input_header);
+
+    char mode[] = "wb ";
+    if (opts->compression_level) {
+        mode[2] = *opts->compression_level;
+    } else {
+        mode[2] = 0;
+    }
+    retval->output_file = sam_open_format(opts->output_name, mode, &opts->ga.out);
+    if (retval->output_file == NULL) {
+        fprintf(stderr, "Could not open output file: %s\n", opts->output_name);
+        cleanup_state(retval);
+        return NULL;
     }
 
     char* dirsep = strrchr(opts->input_name, '/');
@@ -297,6 +327,9 @@ static state_t* init(parsed_opts_t* opts)
     retval->convert_low_quality = opts->convert_low_quality;
     retval->max_low_quality_to_convert = opts->max_low_quality_to_convert;
     retval->change_read_name = opts->change_read_name;
+    retval->barcode_tag_name = strdup(opts->barcode_tag_name);
+    retval->quality_tag_name = strdup(opts->quality_tag_name);
+    retval->compression_level = opts->compression_level ? strdup(opts->compression_level) : NULL;
 
     if (retval->metrics_name) {
         retval->metricsFileHandle = fopen(retval->metrics_name,"w");
@@ -335,7 +368,7 @@ void writeMetricsLine(bc_details_t *bcd, state_t *state, int total_reads, int ma
     fprintf(f, "%f\t", max_reads ? bcd->reads / (double)max_reads : 0 );
     fprintf(f, "%f\t", total_pf_reads ? bcd->pf_reads / (double)total_pf_reads : 0 );
     fprintf(f, "%f\t", max_pf_reads ? bcd->pf_reads / (double)max_pf_reads : 0 );
-    fprintf(f, "%f\t", total_pf_reads_assigned ? bcd->pf_reads * nReads / (double)total_pf_reads_assigned : 0);
+    fprintf(f, "%f", total_pf_reads_assigned ? bcd->pf_reads * nReads / (double)total_pf_reads_assigned : 0);
     fprintf(f, "\n");
 
     if (Nseq) free(Nseq);
@@ -367,11 +400,24 @@ void writeMetrics(khash_t(bc) *barcodeHash, state_t *state)
     }
 
     // print header
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "# ");
+    fprintf(state->metricsFileHandle, "BARCODE_TAG_NAME=%s ", state->barcode_tag_name);
+    fprintf(state->metricsFileHandle, "MAX_MISMATCHES=%d ", state->max_mismatches);
+    fprintf(state->metricsFileHandle, "MIN_MISMATCH_DELTA=%d ", state->min_mismatch_delta);
+    fprintf(state->metricsFileHandle, "MAX_NO_CALLS=%d ", state->max_no_calls);
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+    fprintf(state->metricsFileHandle, "#\n");
+    fprintf(state->metricsFileHandle, "\n");
+    fprintf(state->metricsFileHandle, "##\n");
+
     fprintf(state->metricsFileHandle, "BARCODE\t");
     fprintf(state->metricsFileHandle, "BARCODE_NAME\t");
     fprintf(state->metricsFileHandle, "LIBRARY_NAME\t");
     fprintf(state->metricsFileHandle, "SAMPLE_NAME\t");
-    fprintf(state->metricsFileHandle, "DESCRIPTION READS\t");
+    fprintf(state->metricsFileHandle, "DESCRIPTION\t");
+    fprintf(state->metricsFileHandle, "READS\t");
     fprintf(state->metricsFileHandle, "PF_READS\t");
     fprintf(state->metricsFileHandle, "PERFECT_MATCHES\t");
     fprintf(state->metricsFileHandle, "PF_PERFECT_MATCHES\t");
@@ -743,12 +789,12 @@ static bool decode(state_t* state)
     if (r < 0) break;
 
         // look for barcode tag
-        uint8_t *p = bam_aux_get(file_read,"RT");
+        uint8_t *p = bam_aux_get(file_read,state->barcode_tag_name);
         if (p) {
             char *seq = bam_aux2Z(p);
             char *newseq = strdup(seq);
             if (state->convert_low_quality) {
-                uint8_t *q = bam_aux_get(file_read,"QT");
+                uint8_t *q = bam_aux_get(file_read,state->quality_tag_name);
                 if (q) {
                     char *qual = bam_aux2Z(q);
                     free(newseq);
@@ -806,7 +852,7 @@ static int cleanup_state(state_t* status)
     return ret;
 }
 
-static void cleanup_opts(parsed_opts_t* opts)
+static void cleanup_opts(opts_t* opts)
 {
     if (!opts) return;
     free(opts->input_name);
@@ -818,7 +864,7 @@ static void cleanup_opts(parsed_opts_t* opts)
 int main_decode(int argc, char *argv[])
 {
     int ret = 1;
-    parsed_opts_t* opts = parse_args(argc, argv);
+    opts_t* opts = parse_args(argc, argv);
     if (opts) {
         if (opts->verbose) fprintf(stderr, "options parsed ok\n");
         state_t* status = init(opts);
