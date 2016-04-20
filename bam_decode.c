@@ -607,6 +607,7 @@ static char *findBarcodeName(char *barcode, khash_t(bc) *barcodeHash, state_t *s
     if (!seq) { updateMetrics(state->nullMetric, seq, isPf); return NULL; }
     khint_t k = kh_get(bc,barcodeHash,seq);
     assert(k != kh_end(barcodeHash));
+    free(seq);
     bc_details_t *bcd = kh_val(barcodeHash,k);
     updateMetrics(bcd, barcode, isPf);
     return bcd->name;
@@ -872,6 +873,7 @@ static int cleanup_state(state_t* status)
     free(status->barcode_tag_name);
     free(status->barcode_name);
     free(status->quality_tag_name);
+    free(status->metrics_name);
     free(status->argv_list);
     free_bcd(status->nullMetric);
     free(status);
@@ -885,6 +887,7 @@ static void cleanup_opts(opts_t* opts)
     free(opts->input_name);
     free(opts->output_name);
     free(opts->barcode_name);
+    free(opts->metrics_name);
     free(opts->argv_list);
     sam_global_args_free(&opts->ga);
     free(opts);
