@@ -113,6 +113,16 @@ KHASH_MAP_INIT_STR(bc, bc_details_t *)
 static int cleanup_state(state_t* status);
 static void cleanup_opts(opts_t* opts);
 
+void free_bcd(bc_details_t *bcd)
+{
+    free(bcd->seq);
+    free(bcd->sample);
+    free(bcd->name);
+    free(bcd->lib);
+    free(bcd->desc);
+    free(bcd);
+}
+
 /*
  * display usage information
  */
@@ -272,7 +282,7 @@ static state_t* init(opts_t* opts)
         return NULL;
     }
 
-    retval->argv_list = opts->argv_list;
+    retval->argv_list = strdup(opts->argv_list);
     retval->nullMetric = calloc(1,sizeof(bc_details_t));
 
     if (strcmp(opts->input_name, "-") == 0) opts->input_name = strdup("/dev/stdin");
@@ -483,6 +493,7 @@ khash_t(bc) *loadBarcodeFile(state_t *state)
 
     state->tag_length = tag_length;     // save this - we'll need it later
     fclose(fh);
+    free(buf);
     return barcodeHash;
 }
 
@@ -596,6 +607,7 @@ static char *findBarcodeName(char *barcode, khash_t(bc) *barcodeHash, state_t *s
     if (!seq) { updateMetrics(state->nullMetric, seq, isPf); return NULL; }
     khint_t k = kh_get(bc,barcodeHash,seq);
     assert(k != kh_end(barcodeHash));
+    free(seq);
     bc_details_t *bcd = kh_val(barcodeHash,k);
     updateMetrics(bcd, barcode, isPf);
     return bcd->name;
@@ -729,7 +741,7 @@ void changeHeader(khash_t(bc) *barcodeHash, state_t *state)
     }
 
     // delete the old RG lines
-    sam_hdr_del(sh, "RG", NULL, NULL);
+    sh = sam_hdr_del(sh, "RG", NULL, NULL);
 
     // add the new ones
     for (n=0; n<nrg; n++) {
@@ -833,6 +845,17 @@ static bool decode(state_t* state)
 
     if (state->metricsFileHandle) writeMetrics(barcodeHash, state);
 
+    // cleanup
+    int i=0;
+    for (i = kh_begin(barcodeHash); i != kh_end(barcodeHash); i++) {
+        if (!kh_exist(barcodeHash,i)) continue;
+        bc_details_t *bcd = kh_value(barcodeHash,i);
+        free_bcd(bcd);
+    }
+
+    kh_destroy(bc, barcodeHash);
+    bam_destroy1(file_read);
+    bam_destroy1(paired_read);
     return true;
 }
 
@@ -847,6 +870,12 @@ static int cleanup_state(state_t* status)
     bam_hdr_destroy(status->input_header);
     if (status->metricsFileHandle) fclose(status->metricsFileHandle); 
     status->metricsFileHandle=NULL;
+    free(status->barcode_tag_name);
+    free(status->barcode_name);
+    free(status->quality_tag_name);
+    free(status->metrics_name);
+    free(status->argv_list);
+    free_bcd(status->nullMetric);
     free(status);
 
     return ret;
@@ -857,6 +886,9 @@ static void cleanup_opts(opts_t* opts)
     if (!opts) return;
     free(opts->input_name);
     free(opts->output_name);
+    free(opts->barcode_name);
+    free(opts->metrics_name);
+    free(opts->argv_list);
     sam_global_args_free(&opts->ga);
     free(opts);
 }
