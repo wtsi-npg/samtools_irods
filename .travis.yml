@@ -13,7 +13,7 @@ matrix:
       compiler: gcc
       env: CFLAGS="-std=gnu99 -O0"
     - os: osx
-      compiler: clang
+      compiler: gcc
 
 env:
   global:
