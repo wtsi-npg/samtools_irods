@@ -393,8 +393,8 @@ void writeMetrics(khash_t(bc) *barcodeHash, state_t *state)
     int total_reads = state->nullMetric->reads;
     int total_pf_reads = state->nullMetric->pf_reads;
     int total_pf_reads_assigned = 0;
-    int max_reads = state->nullMetric->reads;
-    int max_pf_reads = state->nullMetric->pf_reads;
+    int max_reads = 0;
+    int max_pf_reads = 0;
     int nReads = 0;
 
     // first loop to count things
