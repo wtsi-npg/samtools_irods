@@ -34,6 +34,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <regex.h>
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
+#include <htslib/cram.h>
+#include "samtools.h"
 #include "sam_opts.h"
 
 
@@ -270,7 +272,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 
 // Filters a header of @RG lines where ID != id_keep
 // TODO: strip @PG's descended from other RGs and their descendants
-static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep)
+static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep, char *arg_list)
 {
     kstring_t str = {0, 0, NULL};
 
@@ -315,11 +317,27 @@ static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep)
     free(hdr->text);
     hdr->text = ks_release(&str);
 
+    // Add the PG line
+    SAM_hdr *sh = sam_hdr_parse_(hdr->text, hdr->l_text);
+    if (sam_hdr_add_PG(sh, "samtools",
+                           "VN", samtools_version(),
+                           arg_list ? "CL": NULL,
+                           arg_list ? arg_list : NULL,
+                           NULL) != 0)
+        return -1;
+
+    free(hdr->text);
+    hdr->text = strdup(sam_hdr_str(sh));
+    hdr->l_text = sam_hdr_length(sh);
+    if (!hdr->text)
+        return false;
+    sam_hdr_free(sh);
+
     return true;
 }
 
 // Set the initial state
-static state_t* init(parsed_opts_t* opts)
+static state_t* init(parsed_opts_t* opts, char *arg_list)
 {
     state_t* retval = calloc(sizeof(state_t), 1);
     if (!retval) {
@@ -425,9 +443,10 @@ static state_t* init(parsed_opts_t* opts)
 
         // Set and edit header
         retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
-        if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i]) ) {
-            fprintf(stderr, "Could not rewrite header for file: %s\n", output_filename);
-            cleanup_state(retval, false);
+        if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i], arg_list) ) {
+            fprintf(stderr, "Could not rewrite header for file: %s\r\n", output_filename);
+            cleanup_state(retval,false);
+            free(output_filename);
             free(input_base_name);
             return NULL;
         }
@@ -438,7 +457,7 @@ static state_t* init(parsed_opts_t* opts)
     return retval;
 }
 
-static bool split(state_t* state)
+static bool split(state_t* state, char *arg_list)
 {
     if (state->unaccounted_file && sam_hdr_write(state->unaccounted_file, state->unaccounted_header) != 0) {
         fprintf(stderr, "Could not write output file header\n");
@@ -574,12 +593,13 @@ static void cleanup_opts(parsed_opts_t* opts)
 int main_split(int argc, char** argv)
 {
     int ret = 1;
+    char *arg_list = stringify_argv(argc+1, argv-1);
     parsed_opts_t* opts = parse_args(argc, argv);
     if (!opts) goto cleanup_opts;
-    state_t* status = init(opts);
+    state_t* status = init(opts,arg_list);
     if (!status) goto cleanup_opts;
 
-    if (!split(status)) {
+    if (!split(status,arg_list)) {
         cleanup_state(status, false);
         goto cleanup_opts;
     }
